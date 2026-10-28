@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AA Reels</title>
+<meta name="description" content="AA Reels - Short videos for everyone">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101010;color:white;font-family:Arial,sans-serif}
+header{position:sticky;top:0;background:#181818;padding:14px;display:flex;justify-content:space-between;align-items:center;z-index:5;border-bottom:1px solid #333}
+.logo{font-size:23px;font-weight:bold;color:#ff375f}
+button{border:0;border-radius:9px;padding:10px 14px;font-weight:bold;cursor:pointer}
+.upload{background:#ff375f;color:white}
+main{max-width:520px;margin:auto;padding:12px}
+.notice{font-size:13px;color:#bbb;text-align:center;padding:10px}
+.card{background:#202020;border-radius:14px;overflow:hidden;margin:14px 0 22px}
+video{display:block;width:100%;max-height:70vh;background:#000;object-fit:contain}
+.details{padding:12px}
+.title{font-size:17px;font-weight:bold;margin-bottom:7px}
+.desc{color:#ccc;font-size:14px;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;margin-top:12px;align-items:center}
+.like{background:#333;color:white}
+.like.active{background:#ff375f}
+.delete{background:#333;color:#ff9aaa;margin-left:auto}
+.empty{text-align:center;color:#aaa;padding:50px 12px}
+dialog{background:#202020;color:white;border:1px solid #555;border-radius:15px;width:calc(100% - 30px);max-width:420px}
+dialog::backdrop{background:#000b}
+input,textarea{width:100%;padding:12px;margin:7px 0 12px;border-radius:8px;border:1px solid #555;background:#111;color:white}
+label{font-size:14px}
+.row{display:flex;gap:8px}
+.row button{flex:1}
+.cancel{background:#444;color:white}
+footer{text-align:center;color:#888;padding:25px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">▶ AA Reels</div>
+  <button class="upload" id="openUpload">＋ Upload</button>
+</header>
+
+<main>
+  <div class="notice">તમારા મનપસંદ શોર્ટ વીડિયો જુઓ 🎬</div>
+  <div id="feed">
+    <div class="empty">હજુ કોઈ વીડિયો નથી.<br>＋ Upload દબાવીને વીડિયો ઉમેરો.</div>
+  </div>
+</main>
+<footer>© AA Reels</footer>
+
+<dialog id="uploadDialog">
+  <form id="uploadForm">
+    <h2>નવો Reel ઉમેરો</h2>
+    <label for="videoTitle">વીડિયોનું નામ</label>
+    <input id="videoTitle" maxlength="80" required placeholder="વીડિયાનું નામ">
+    <label for="videoDesc">વર્ણન</label>
+    <textarea id="videoDesc" maxlength="300" placeholder="વીડિયા વિશે લખો"></textarea>
+    <label for="videoFile">તમારા ફોનમાંથી વીડિયો પસંદ કરો (20 MB સુધી)</label>
+    <input id="videoFile" type="file" accept="video/*" required>
+    <p class="notice">આ ડેમોમાં વીડિયો ફક્ત આ બ્રાઉઝરમાં દેખાશે. તે બીજા લોકો સુધી અપલોડ થતો નથી.</p>
+    <div class="row">
+      <button type="submit" class="upload">વીડિયો ઉમેરો</button>
+      <button type="button" class="cancel" id="closeUpload">રદ કરો</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const dialog = document.getElementById('uploadDialog');
+const form = document.getElementById('uploadForm');
+const feed = document.getElementById('feed');
+let reels = [];
+let liked = new Set();
+
+document.getElementById('openUpload').onclick = () => dialog.showModal();
+document.getElementById('closeUpload').onclick = () => dialog.close();
+
+form.addEventListener('submit', function(e){
+  e.preventDefault();
+  const file = document.getElementById('videoFile').files[0];
+  const title = document.getElementById('videoTitle').value.trim();
+  const desc = document.getElementById('videoDesc').value.trim();
+
+  if(!file || !file.type.startsWith('video/')){
+    alert('કૃપા કરીને વીડિયો પસંદ કરો.');
+    return;
+  }
+  if(file.size > 20 * 1024 * 1024){
+    alert('વીડિયો 20 MB કરતાં નાનો પસંદ કરો.');
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+  reels.unshift({id:Date.now(), title, desc, url});
+  render();
+  form.reset();
+  dialog.close();
+});
+
+function render(){
+  feed.replaceChildren();
+  if(!reels.length){
+    feed.innerHTML = '<div class="empty">હજુ કોઈ વીડિયો નથી.<br>＋ Upload દબાવીને વીડિયો ઉમેરો.</div>';
+    return;
+  }
+
+  reels.forEach(reel => {
+    const card = document.createElement('article');
+    card.className = 'card';
+
+    const video = document.createElement('video');
+    video.src = reel.url;
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+
+    const details = document.createElement('div');
+    details.className = 'details';
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = reel.title;
+
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = reel.desc;
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const like = document.createElement('button');
+    like.className = 'like' + (liked.has(reel.id) ? ' active' : '');
+    like.textContent = (liked.has(reel.id) ? '♥' : '♡') + ' Like';
+    like.onclick = () => {
+      liked.has(reel.id) ? liked.delete(reel.id) : liked.add(reel.id);
+      render();
+    };
+
+    const remove = document.createElement('button');
+    remove.className = 'delete';
+    remove.textContent = 'Remove';
+    remove.onclick = () => {
+      URL.revokeObjectURL(reel.url);
+      reels = reels.filter(item => item.id !== reel.id);
+      liked.delete(reel.id);
+      render();
+    };
+
+    actions.append(like, remove);
+    details.append(title, desc, actions);
+    card.append(video, details);
+    feed.append(card);
+  });
+}
+</script>
+</body>
+</html>
