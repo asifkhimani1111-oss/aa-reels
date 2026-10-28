@@ -31,7 +31,9 @@ label{font-size:14px}
 .row{display:flex;gap:8px}
 .row button{flex:1}
 .cancel{background:#444;color:white}
-footer{text-align:center;color:#888;padding:25px;font-size:12px}
+/* WhatsApp બટન માટેની ડિઝાઇન */
+.whatsapp-float{position:fixed;bottom:20px;right:20px;background:#25d366;color:white;padding:12px 18px;border-radius:30px;font-weight:bold;text-decoration:none;display:flex;align-items:center;gap:8px;box-shadow:0 4px 10px rgba(0,0,0,0.3);z-index:100;font-size:14px}
+footer{text-align:center;color:#888;padding:25px 25px 70px;font-size:12px}
 </style>
 </head>
 <body>
@@ -46,6 +48,12 @@ footer{text-align:center;color:#888;padding:25px;font-size:12px}
     <div class="empty">હજુ કોઈ વીડિયો નથી.<br>＋ Upload દબાવીને વીડિયો ઉમેરો.</div>
   </div>
 </main>
+
+<!-- WhatsApp પર સીધા ચેટ કરવા માટેનું ફ્લોટિંગ બટન -->
+<a href="https://wa.me/919426852334?text=नमस्कार,%20મારે%20AA%20Reels%20વિશે%20વધુ%20માહિતી%20જોઈએ%20છે." class="whatsapp-float" target="_blank">
+  💬 WhatsApp ચેટ
+</a>
+
 <footer>© AA Reels - Gadhada</footer>
 
 <dialog id="uploadDialog">
@@ -55,175 +63,119 @@ footer{text-align:center;color:#888;padding:25px;font-size:12px}
     <input id="videoTitle" maxlength="80" required placeholder="વીડિયાનું નામ">
     <label for="videoDesc">વર્ણન</label>
     <textarea id="videoDesc" maxlength="300" placeholder="વીડિયા વિશે લખો"></textarea>
-    <label for="videoFile">વીડિયો પસંદ કરો (20 MB સુધી)</label>
+    <label for="videoFile">તમારા ફોનમાંથી વીડિયો પસંદ કરો (20 MB સુધી)</label>
     <input id="videoFile" type="file" accept="video/*" required>
-    <div class="row" style="margin-top:15px;">
+    <p class="notice">આ વીડિયો તમારા બ્રાઉઝરમાં સેવ થશે.</p>
+    <div class="row">
       <button type="submit" class="upload">વીડિયો ઉમેરો</button>
       <button type="button" class="cancel" id="closeUpload">રદ કરો</button>
     </div>
   </form>
 </dialog>
 
-<!-- Firebase SDKs (Modular Version) -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+<script>
+const dialog = document.getElementById('uploadDialog');
+const form = document.getElementById('uploadForm');
+const feed = document.getElementById('feed');
 
-  // TODO: તમારા ફાયરબેઝ કન્ફિગ અહીં ઉમેરો
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
+let reels = JSON.parse(localStorage.getItem('aa_reels_data')) || [];
+let liked = new Set(JSON.parse(localStorage.getItem('aa_reels_likes')) || []);
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const storage = getStorage(app);
+document.getElementById('openUpload').onclick = () => dialog.showModal();
+document.getElementById('closeUpload').onclick = () => dialog.close();
 
-  let currentUser = null;
-  const ADMIN_UID = "YOUR_ADMIN_UID"; // તમારું એડમિન યુઝર આઈડી અહીં મૂકો
+function saveToStorage() {
+  localStorage.setItem('aa_reels_data', JSON.stringify(reels));
+  localStorage.setItem('aa_reels_likes', JSON.stringify([...liked]));
+}
 
-  // Anonymous Login જેથી દરેક યૂઝરને યુનિક આઈડી મળે
-  signInAnonymously(auth).catch((error) => {
-    console.error("Auth error:", error);
-  });
+form.addEventListener('submit', function(e){
+  e.preventDefault();
+  const file = document.getElementById('videoFile').files[0];
+  const title = document.getElementById('videoTitle').value.trim();
+  const desc = document.getElementById('videoDesc').value.trim();
 
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      currentUser = user;
-      loadReels();
-    }
-  });
-
-  const dialog = document.getElementById('uploadDialog');
-  const form = document.getElementById('uploadForm');
-  const feed = document.getElementById('feed');
-
-  document.getElementById('openUpload').onclick = () => dialog.showModal();
-  document.getElementById('closeUpload').onclick = () => dialog.close();
-
-  form.addEventListener('submit', async function(e){
-    e.preventDefault();
-    const file = document.getElementById('videoFile').files[0];
-    const title = document.getElementById('videoTitle').value.trim();
-    const desc = document.getElementById('videoDesc').value.trim();
-
-    if(!file || !file.type.startsWith('video/')){
-      alert('કૃપા કરીને સાચો વીડિયો પસંદ કરો.');
-      return;
-    }
-    if(file.size > 20 * 1024 * 1024){
-      alert('વીડિયો 20 MB કરતાં નાનો હોવો જોઈએ.');
-      return;
-    }
-
-    try {
-      alert('વીડિયો અપલોડ થઈ રહ્યો છે, થોડી રાહ જુઓ...');
-      const storageRef = ref(storage, 'reels/' + Date.now() + '_' + file.name);
-      const snapshot = await uploadBytes(storageRef, file);
-      const videoUrl = await getDownloadURL(snapshot.ref);
-
-      await addDoc(collection(db, "reels"), {
-        title,
-        desc,
-        videoUrl,
-        uid: currentUser.uid,
-        likes: [],
-        createdAt: serverTimestamp()
-      });
-
-      form.reset();
-      dialog.close();
-      loadReels();
-      alert('વીડિયો સફળતાપૂર્વક અપલોડ થઈ ગયો!');
-    } catch (error) {
-      console.error("Upload error: ", error);
-      alert('વીડિયો અપલોડ કરવામાં ભૂલ થઈ છે.');
-    }
-  });
-
-  async function loadReels() {
-    feed.replaceChildren();
-    const q = query(collection(db, "reels"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      feed.innerHTML = '<div class="empty">હજુ કોઈ વીડિયો નથી.<br>＋ Upload દબાવીને વીડિયો ઉમેરો.</div>';
-      return;
-    }
-
-    querySnapshot.forEach((documentSnapshot) => {
-      const reel = documentSnapshot.data();
-      const reelId = documentSnapshot.id;
-
-      const card = document.createElement('article');
-      card.className = 'card';
-
-      const video = document.createElement('video');
-      video.src = reel.videoUrl;
-      video.controls = true;
-      video.playsInline = true;
-      video.preload = 'metadata';
-
-      const details = document.createElement('div');
-      details.className = 'details';
-
-      const title = document.createElement('div');
-      title.className = 'title';
-      title.textContent = reel.title;
-
-      const desc = document.createElement('div');
-      desc.className = 'desc';
-      desc.textContent = reel.desc;
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const likesArray = reel.likes || [];
-      const hasLiked = currentUser && likesArray.includes(currentUser.uid);
-
-      const like = document.createElement('button');
-      like.className = 'like' + (hasLiked ? ' active' : '');
-      like.textContent = (hasLiked ? '♥ ' : '♡ ') + likesArray.length + ' Like';
-      
-      like.onclick = async () => {
-        if (!currentUser) return;
-        const reelRef = doc(db, "reels", reelId);
-        if (hasLiked) {
-          await updateDoc(reelRef, { likes: arrayRemove(currentUser.uid) });
-        } else {
-          await updateDoc(reelRef, { likes: arrayUnion(currentUser.uid) });
-        }
-        loadReels();
-      };
-
-      actions.append(like);
-
-      // જો વીડિયો અપલોડ કરનાર ખુદ આ યૂઝર હોય અથવા તમે એડમિન હોવ, તો જ ડિલીટ બટન દેખાય
-      if (currentUser && (reel.uid === currentUser.uid || currentUser.uid === ADMIN_UID)) {
-        const remove = document.createElement('button');
-        remove.className = 'delete';
-        remove.textContent = 'Remove';
-        remove.onclick = async () => {
-          if (confirm('શું તમે આ વીડિયો ડિલીટ કરવા માંગો છો?')) {
-            await deleteDoc(doc(db, "reels", reelId));
-            loadReels();
-          }
-        };
-        actions.append(remove);
-      }
-
-      details.append(title, desc, actions);
-      card.append(video, details);
-      feed.append(card);
-    });
+  if(!file || !file.type.startsWith('video/')){
+    alert('કૃપા કરીને વીડિયો પસંદ કરો.');
+    return;
   }
+  if(file.size > 20 * 1024 * 1024){
+    alert('વીડિયો 20 MB કરતાં નાનો પસંદ કરો.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const base64Url = event.target.result;
+    reels.unshift({id:Date.now(), title, desc, url: base64Url});
+    saveToStorage();
+    render();
+    form.reset();
+    dialog.close();
+  };
+  reader.readAsDataURL(file);
+});
+
+function render(){
+  feed.replaceChildren();
+  if(!reels.length){
+    feed.innerHTML = '<div class="empty">હજુ કોઈ વીડિયો નથી.<br>＋ Upload દબાવીને વીડિયો ઉમેરો.</div>';
+    return;
+  }
+
+  reels.forEach(reel => {
+    const card = document.createElement('article');
+    card.className = 'card';
+
+    const video = document.createElement('video');
+    video.src = reel.url;
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+
+    const details = document.createElement('div');
+    details.className = 'details';
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = reel.title;
+
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = reel.desc;
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const like = document.createElement('button');
+    like.className = 'like' + (liked.has(reel.id) ? ' active' : '');
+    like.textContent = (liked.has(reel.id) ? '♥' : '♡') + ' Like';
+    like.onclick = () => {
+      liked.has(reel.id) ? liked.delete(reel.id) : liked.add(reel.id);
+      saveToStorage();
+      render();
+    };
+
+    const remove = document.createElement('button');
+    remove.className = 'delete';
+    remove.textContent = 'Remove';
+    remove.onclick = () => {
+      if(confirm('શું તમે આ વીડિયો હટાવવા માંગો છો?')) {
+        reels = reels.filter(item => item.id !== reel.id);
+        liked.delete(reel.id);
+        saveToStorage();
+        render();
+      }
+    };
+
+    actions.append(like, remove);
+    details.append(title, desc, actions);
+    card.append(video, details);
+    feed.append(card);
+  });
+}
+
+render();
 </script>
 </body>
 </html>
